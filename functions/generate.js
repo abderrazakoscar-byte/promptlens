@@ -1,9 +1,9 @@
-// Netlify serverless function: image -> prompt, powered by the Google Gemini API.
+// Cloudflare Pages Function: POST /generate  (image -> prompt, powered by Google Gemini)
 // Requires a logged-in user (Supabase) and uses one credit per prompt.
-// Environment variables: GEMINI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-// Optional: GEMINI_MODEL (default below).
+// Variables (Cloudflare Pages -> Settings -> Variables and Secrets):
+//   GEMINI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   (+ optional GEMINI_MODEL)
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+const DEFAULT_MODEL = "gemini-2.5-flash-lite";
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 const MAX_BASE64_CHARS = 5_500_000; // ~4MB of image data
 const MAX_FETCH_BYTES = 4 * 1024 * 1024;
@@ -36,19 +36,19 @@ const SYSTEM =
   "Do not identify real people by name; describe them by visible traits only. " +
   "If the image contains explicit sexual content, nudity, or sexualised minors, output exactly BLOCKED_NSFW and nothing else.";
 
-const reply = (statusCode, body) => ({
-  statusCode,
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body),
-});
+const reply = (status, body) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 
 /* ---------- Supabase helpers (login check + credits) ---------- */
-async function getUser(authHeader) {
+async function getUser(env, authHeader) {
   const token = (authHeader || "").replace(/^Bearer\s+/i, "");
   if (!token) return null;
   try {
-    const r = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, {
-      headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${token}` },
+    const r = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${token}` },
     });
     if (!r.ok) return null;
     const u = await r.json();
@@ -58,10 +58,10 @@ async function getUser(authHeader) {
   }
 }
 
-async function rpc(name, args) {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+async function rpc(env, name, args) {
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
   try {
-    const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${name}`, {
+    const r = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/${name}`, {
       method: "POST",
       headers: { apikey: key, Authorization: `Bearer ${key}`, "content-type": "application/json" },
       body: JSON.stringify(args),
@@ -87,6 +87,16 @@ function isPrivateHost(host) {
   );
 }
 
+function toBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
 async function fetchImageAsBase64(rawUrl) {
   let url;
   try {
@@ -97,30 +107,28 @@ async function fetchImageAsBase64(rawUrl) {
   if (!["http:", "https:"].includes(url.protocol) || isPrivateHost(url.hostname))
     throw { status: 400, message: "This image URL isn't allowed." };
 
-  const res = await fetch(url.href, { redirect: "error" });
+  const res = await fetch(url.href, { redirect: "manual" });
   if (!res.ok) throw { status: 400, message: "Couldn't download that image." };
   const type = (res.headers.get("content-type") || "").split(";")[0].trim();
   if (!ALLOWED_TYPES.includes(type))
     throw { status: 400, message: "The link must point to a PNG, JPG, WEBP or GIF image." };
-  const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.length > MAX_FETCH_BYTES) throw { status: 413, message: "Image is too large (max about 4MB)." };
-  return { media_type: type, data: buf.toString("base64") };
+  const buf = await res.arrayBuffer();
+  if (buf.byteLength > MAX_FETCH_BYTES) throw { status: 413, message: "Image is too large (max about 4MB)." };
+  return { media_type: type, data: toBase64(buf) };
 }
 
-exports.handler = async (event) => {
-  if (event.httpMethod !== "POST") return reply(405, { error: "POST only" });
-  if (!process.env.GEMINI_API_KEY)
-    return reply(500, { error: "Server is missing GEMINI_API_KEY." });
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY)
+export async function onRequestPost({ request, env }) {
+  if (!env.GEMINI_API_KEY) return reply(500, { error: "Server is missing GEMINI_API_KEY." });
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY)
     return reply(500, { error: "Server is missing Supabase settings." });
 
   // 1) Must be logged in
-  const user = await getUser(event.headers.authorization || event.headers.Authorization);
+  const user = await getUser(env, request.headers.get("authorization"));
   if (!user) return reply(401, { error: "Please log in to generate prompts." });
 
   let input;
   try {
-    input = JSON.parse(event.body || "{}");
+    input = await request.json();
   } catch {
     return reply(400, { error: "Invalid JSON body." });
   }
@@ -148,7 +156,7 @@ exports.handler = async (event) => {
   }
 
   // 3) Use one credit
-  const credit = await rpc("consume_credit", { uid: user.id });
+  const credit = await rpc(env, "consume_credit", { uid: user.id });
   if (!credit) return reply(500, { error: "Couldn't check your credits. Try again." });
   if (!credit.ok)
     return reply(402, {
@@ -158,7 +166,7 @@ exports.handler = async (event) => {
           : "You've used your free prompts for today. Come back tomorrow or upgrade.",
       credits: credit,
     });
-  const refund = () => rpc("refund_credit", { uid: user.id });
+  const refund = () => rpc(env, "refund_credit", { uid: user.id });
 
   const instruction =
     MODES[mode] +
@@ -167,14 +175,15 @@ exports.handler = async (event) => {
       : ` Write the prompt text in ${language} (keep any parameters like --ar or --v as they are).`);
 
   // 4) Ask Gemini (credit is given back if the AI side fails)
+  const model = env.GEMINI_MODEL || DEFAULT_MODEL;
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
       {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-goog-api-key": process.env.GEMINI_API_KEY,
+          "x-goog-api-key": env.GEMINI_API_KEY,
         },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: SYSTEM }] },
@@ -224,4 +233,7 @@ exports.handler = async (event) => {
     await refund();
     return reply(500, { error: "Request failed: " + err.message });
   }
-};
+}
+
+// Any other method (GET etc.)
+export const onRequest = () => reply(405, { error: "POST only" });
