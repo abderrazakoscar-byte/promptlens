@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PromptLens | Image to Prompt Generator</title>
+<meta name="description" content="Turn any image into a detailed prompt for Midjourney, Flux, Stable Diffusion and more.">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --text:#eef0f4; --muted:#9aa3b2; --accent:#ff6b4a; --accent2:#ffb347; --ok:#4ade80;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  a{color:inherit}
+  header{display:flex;justify-content:space-between;align-items:center;max-width:1050px;margin:0 auto;padding:18px 20px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:1.15rem;letter-spacing:.2px}
+  .logo i{width:26px;height:26px;border-radius:8px;background:conic-gradient(from 200deg,var(--accent),var(--accent2),var(--accent));display:inline-block;position:relative}
+  .logo i::after{content:"";position:absolute;inset:7px;border-radius:50%;background:var(--bg)}
+  nav a{color:var(--muted);text-decoration:none;margin-left:18px;font-size:.95rem}
+  nav a:hover{color:var(--text)}
+  main{max-width:1050px;margin:0 auto;padding:0 20px 60px}
+  h1{font-size:clamp(1.9rem,4.5vw,3rem);line-height:1.1;margin:26px 0 8px;text-align:center}
+  h1 span{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{text-align:center;color:var(--muted);margin:0 auto 30px;max-width:560px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+  .tabs{display:flex;gap:6px;margin-bottom:12px}
+  .tabs button{flex:1;background:var(--panel2);color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:8px;cursor:pointer;font:inherit;font-size:.9rem}
+  .tabs button.on{color:var(--text);border-color:var(--accent);background:#25201f}
+  .drop{border:2px dashed var(--line);border-radius:12px;min-height:210px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);cursor:pointer;overflow:hidden;position:relative;padding:10px}
+  .drop.over{border-color:var(--accent);color:var(--text)}
+  .drop img{max-width:100%;max-height:300px;border-radius:8px;display:block}
+  .row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+  label{font-size:.82rem;color:var(--muted);display:block;margin-bottom:4px}
+  select,input[type=url],textarea{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit}
+  .col{flex:1;min-width:150px}
+  .go{width:100%;margin-top:16px;border:0;border-radius:12px;padding:13px;font:inherit;font-weight:700;color:#1a0f0b;background:linear-gradient(90deg,var(--accent),var(--accent2));cursor:pointer}
+  .go:disabled{opacity:.55;cursor:wait}
+  .out{min-height:210px;white-space:pre-wrap;word-break:break-word}
+  .placeholder{color:var(--muted)}
+  .err{color:#ff8a8a}
+  .actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .actions button,.mini{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:7px 12px;cursor:pointer;font:inherit;font-size:.88rem}
+  .actions button:hover,.mini:hover{border-color:var(--accent)}
+  .fields .f{margin-bottom:10px}
+  .fields textarea{min-height:46px;resize:vertical}
+  section.block{margin-top:50px}
+  h2{font-size:1.5rem;margin:0 0 16px}
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;counter-reset:s}
+  @media(max-width:820px){.steps{grid-template-columns:1fr 1fr}}
+  .steps div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;counter-increment:s}
+  .steps div::before{content:counter(s);display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#1a0f0b;font-weight:700;margin-bottom:8px}
+  details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:10px}
+  summary{cursor:pointer;font-weight:600}
+  details p{color:var(--muted);margin:10px 0 0}
+  #history{margin-top:14px;display:none}
+  #history .h{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;font-size:.88rem;color:var(--muted);cursor:pointer}
+  #history .h b{color:var(--text)}
+  footer{text-align:center;color:var(--muted);font-size:.85rem;padding:30px 20px}
+  .auth{margin-left:18px;display:inline-flex;gap:8px;align-items:center}
+  .badge{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:.82rem;color:var(--accent2)}
+  input[type=email],input[type=password]{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
+  .modal[hidden]{display:none}
+  .mbox{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px;width:100%;max-width:380px}
+  .mbox h3{margin:0 0 14px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><i></i>PromptLens</div>
+  <nav><a href="#tool">Tool</a><a href="#how">How it works</a><a href="#faq">FAQ</a><span id="authArea" class="auth"></span></nav>
+</header>
+
+<main>
+  <h1>Turn any image into a <span>ready-to-use prompt</span></h1>
+  <p class="sub">Upload a picture and get a detailed prompt for Midjourney, Flux, Stable Diffusion or a plain description.</p>
+
+  <div class="grid" id="tool">
+    <div class="card">
+      <div class="tabs">
+        <button class="on" data-tab="upload">Upload</button>
+        <button data-tab="paste">Paste</button>
+        <button data-tab="url">Image URL</button>
+      </div>
+
+      <div id="tab-upload">
+        <div class="drop" id="drop">Click, drag and drop, or paste (Ctrl+V) an image<br>PNG, JPG or WEBP</div>
+        <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+      </div>
+      <div id="tab-paste" hidden>
+        <div class="drop" id="pasteBox" tabindex="0">Click here, then press Ctrl+V (or Cmd+V) to paste an image</div>
+      </div>
+      <div id="tab-url" hidden>
+        <input type="url" id="urlInput" placeholder="https://example.com/image.jpg">
+        <div class="drop" id="urlPrev" style="margin-top:10px;min-height:120px">Preview appears here</div>
+      </div>
+
+      <div class="row">
+        <div class="col">
+          <label for="mode">Prompt type</label>
+          <select id="mode">
+            <option value="general">General Image Prompt</option>
+            <option value="structured">Structured Prompt (editable)</option>
+            <option value="graphic">Graphic Design</option>
+            <option value="json">JSON</option>
+            <option value="flux">Flux</option>
+            <option value="midjourney">Midjourney</option>
+            <option value="sd">Stable Diffusion</option>
+          </select>
+        </div>
+        <div class="col">
+          <label for="lang">Prompt language</label>
+          <select id="lang">
+            <option>English</option><option>Español</option><option>Français</option><option>Deutsch</option>
+            <option>العربية</option><option>Italiano</option><option>Português</option><option>Türkçe</option>
+            <option>Русский</option><option>日本語</option><option>한국어</option><option>简体中文</option>
+          </select>
+        </div>
+      </div>
+      <button class="go" id="go">Generate prompt</button>
+    </div>
+
+    <div class="card">
+      <div class="out" id="out"><span class="placeholder">Your generated prompt will appear here.</span></div>
+      <div class="actions" id="actions" hidden>
+        <button id="copy">Copy</button>
+        <button id="regen">Regenerate</button>
+      </div>
+      <div style="margin-top:14px"><button class="mini" id="histBtn">View history</button></div>
+      <div id="history"></div>
+    </div>
+  </div>
+
+  <section class="block" id="how">
+    <h2>How it works</h2>
+    <div class="steps">
+      <div>Upload, paste or link an image</div>
+      <div>Pick the prompt type and language</div>
+      <div>Press Generate and wait a few seconds</div>
+      <div>Copy the prompt or edit the fields</div>
+    </div>
+  </section>
+
+  <section class="block" id="faq">
+    <h2>FAQ</h2>
+    <details><summary>What does the tool do?</summary><p>It looks at your image and writes a text prompt that describes the subject, style, colors, lighting and composition, so you can recreate or remix it with an AI image generator.</p></details>
+    <details><summary>Which formats are supported?</summary><p>PNG, JPG, WEBP and GIF. Large images are shrunk in your browser before they are sent.</p></details>
+    <details><summary>Are my images stored?</summary><p>Images are sent only to generate the prompt. This app does not save them on a server.</p></details>
+    <details><summary>Is adult content allowed?</summary><p>No. Adult images are rejected.</p></details>
+  </section>
+</main>
+
+<div id="modal" class="modal" hidden>
+  <div class="mbox">
+    <h3 id="mTitle">Log in</h3>
+    <label for="mEmail">Email</label>
+    <input type="email" id="mEmail" autocomplete="email">
+    <label for="mPass" style="margin-top:10px">Password (6+ characters)</label>
+    <input type="password" id="mPass" autocomplete="current-password">
+    <div id="mMsg" class="err" style="min-height:22px;margin-top:8px;font-size:.9rem"></div>
+    <button class="go" id="mGo" style="margin-top:6px">Log in</button>
+    <p style="margin:14px 0 0;font-size:.9rem;color:var(--muted)"><a href="#" id="mSwitch">No account? Sign up</a> · <a href="#" id="mClose">Close</a></p>
+  </div>
+</div>
+
+<footer>© <span id="yr"></span> PromptLens</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let current = null;        // {media_type, data} or null
+let lastResult = "";       // text to copy
+const FIELD_LABELS = {subject:"Subject",action_or_pose:"Action / pose",setting:"Setting",style:"Style",lighting:"Lighting",composition:"Composition",colors:"Colors",mood:"Mood",extra_details:"Extra details"};
+$("yr").textContent = new Date().getFullYear();
+
+/* tabs */
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+  ["upload","paste","url"].forEach(t => $("tab-"+t).hidden = (t !== b.dataset.tab));
+  if (b.dataset.tab === "paste") $("pasteBox").focus();
+});
+
+/* image intake: resize in the browser so uploads stay small */
+function showPreview(el, src){ el.innerHTML = ""; const i = new Image(); i.src = src; el.appendChild(i); }
+function loadFile(file){
+  if(!file || !file.type.startsWith("image/")) return msg("Please choose an image file.", true);
+  const fr = new FileReader();
+  fr.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const max = 1568, s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      const url = c.toDataURL("image/jpeg", 0.88);
+      current = { media_type: "image/jpeg", data: url.split(",")[1] };
+      $("urlInput").value = "";
+      [$("drop"), $("pasteBox")].forEach(el => showPreview(el, url));
+    };
+    img.src = fr.result;
+  };
+  fr.readAsDataURL(file);
+}
+$("drop").onclick = () => $("file").click();
+$("file").onchange = e => loadFile(e.target.files[0]);
+["dragover","dragenter"].forEach(ev => $("drop").addEventListener(ev, e => { e.preventDefault(); $("drop").classList.add("over"); }));
+["dragleave","drop"].forEach(ev => $("drop").addEventListener(ev, e => { e.preventDefault(); $("drop").classList.remove("over"); }));
+$("drop").addEventListener("drop", e => loadFile(e.dataTransfer.files[0]));
+document.addEventListener("paste", e => {
+  const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith("image/"));
+  if (it) loadFile(it.getAsFile());
+});
+$("urlInput").oninput = () => {
+  const v = $("urlInput").value.trim();
+  if (v) { current = null; showPreview($("urlPrev"), v); }
+};
+
+/* output helpers */
+function msg(t, isErr){ $("out").innerHTML = ""; const s = document.createElement("span"); s.className = isErr ? "err" : "placeholder"; s.textContent = t; $("out").appendChild(s); $("actions").hidden = true; }
+
+function render(res){
+  const out = $("out"); out.innerHTML = "";
+  if (res.data && typeof res.data === "object" && res.mode === "structured") {
+    const box = document.createElement("div"); box.className = "fields";
+    Object.keys(FIELD_LABELS).forEach(k => {
+      if (res.data[k] === undefined) return;
+      const w = document.createElement("div"); w.className = "f";
+      const l = document.createElement("label"); l.textContent = FIELD_LABELS[k];
+      const t = document.createElement("textarea"); t.dataset.k = k; t.value = res.data[k];
+      t.oninput = sync; w.append(l, t); box.appendChild(w);
+    });
+    out.appendChild(box);
+    function sync(){ lastResult = [...box.querySelectorAll("textarea")].map(t => t.value.trim()).filter(Boolean).join(", "); }
+    sync();
+  } else if (res.data) {
+    lastResult = JSON.stringify(res.data, null, 2); out.textContent = lastResult;
+  } else {
+    lastResult = res.text; out.textContent = res.text;
+  }
+  $("actions").hidden = false;
+}
+
+/* generate */
+async function generate(){
+  const url = $("urlInput").value.trim();
+  const useUrl = !$("tab-url").hidden && url;
+  if (!current && !useUrl) return msg("Add an image first.", true);
+  const session = sb ? (await sb.auth.getSession()).data.session : null;
+  if (!session) { openModal(); return msg("Log in (it's free) to generate prompts.", true); }
+  $("go").disabled = true; $("go").textContent = "Generating…"; msg("Analysing the image…");
+  try {
+    const r = await fetch("/.netlify/functions/generate", {
+      method: "POST", headers: {"content-type":"application/json", "authorization":"Bearer " + session.access_token},
+      body: JSON.stringify({ mode: $("mode").value, language: $("lang").value, ...(useUrl ? {imageUrl:url} : {image:current}) })
+    });
+    const j = await r.json();
+    if (!r.ok) { refreshCredits(); return msg(j.error || "Something went wrong.", true); }
+    render(j); saveHistory(j); refreshCredits();
+  } catch (e) { msg("Network error. Try again.", true); }
+  finally { $("go").disabled = false; $("go").textContent = "Generate prompt"; }
+}
+$("go").onclick = generate;
+$("regen").onclick = generate;
+$("copy").onclick = async () => {
+  try { await navigator.clipboard.writeText(lastResult); $("copy").textContent = "Copied ✓"; setTimeout(() => $("copy").textContent = "Copy", 1400); } catch {}
+};
+
+/* login + credits (Supabase) */
+const cfg = window.PROMPTLENS_CONFIG || {};
+const sb = (cfg.SUPABASE_URL && !cfg.SUPABASE_URL.startsWith("PASTE") && window.supabase)
+  ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
+let signupMode = false;
+function setMode(s){
+  signupMode = s;
+  $("mTitle").textContent = s ? "Create account" : "Log in";
+  $("mGo").textContent = s ? "Sign up" : "Log in";
+  $("mSwitch").textContent = s ? "Have an account? Log in" : "No account? Sign up";
+  $("mPass").autocomplete = s ? "new-password" : "current-password";
+  $("mMsg").textContent = ""; $("mMsg").style.color = "";
+}
+function openModal(){ setMode(false); $("modal").hidden = false; if (!sb) $("mMsg").textContent = "Setup isn't finished: Supabase keys are missing in config.js."; }
+function closeModal(){ $("modal").hidden = true; }
+$("mSwitch").onclick = e => { e.preventDefault(); setMode(!signupMode); };
+$("mClose").onclick = e => { e.preventDefault(); closeModal(); };
+$("mGo").onclick = async () => {
+  if (!sb) return;
+  const email = $("mEmail").value.trim(), password = $("mPass").value;
+  if (!email || password.length < 6) { $("mMsg").style.color = ""; $("mMsg").textContent = "Enter an email and a password of at least 6 characters."; return; }
+  $("mGo").disabled = true;
+  const res = signupMode ? await sb.auth.signUp({ email, password }) : await sb.auth.signInWithPassword({ email, password });
+  $("mGo").disabled = false;
+  if (res.error) { $("mMsg").style.color = ""; $("mMsg").textContent = res.error.message; return; }
+  if (signupMode && !res.data.session) { $("mMsg").style.color = "var(--ok)"; $("mMsg").textContent = "Check your email (and spam), click the confirmation link, then log in."; return; }
+  closeModal();
+};
+async function renderAuth(){
+  const area = $("authArea"); area.innerHTML = "";
+  const s = sb ? (await sb.auth.getSession()).data.session : null;
+  if (!s) {
+    const b = document.createElement("button"); b.className = "mini"; b.textContent = "Log in"; b.onclick = openModal;
+    area.appendChild(b); return;
+  }
+  const badge = document.createElement("span"); badge.className = "badge"; badge.id = "credits"; badge.textContent = "…";
+  const out = document.createElement("button"); out.className = "mini"; out.textContent = "Log out";
+  out.onclick = () => sb.auth.signOut();
+  area.append(badge, out); refreshCredits();
+}
+async function refreshCredits(){
+  const badge = $("credits"); if (!sb || !badge) return;
+  const s = (await sb.auth.getSession()).data.session; if (!s) return;
+  try {
+    const r = await fetch("/.netlify/functions/me", { headers: { authorization: "Bearer " + s.access_token } });
+    const j = await r.json();
+    badge.textContent = r.ok ? j.remaining + "/" + j.limit + (j.plan === "pro" ? " this month" : " today") : "";
+  } catch {}
+}
+if (sb) sb.auth.onAuthStateChange(() => renderAuth());
+renderAuth();
+
+/* history (local to this browser) */
+function getHist(){ try { return JSON.parse(localStorage.getItem("pl_hist") || "[]"); } catch { return []; } }
+function saveHistory(res){
+  try { const h = getHist(); h.unshift({ t: Date.now(), mode: $("mode").value, text: lastResult }); localStorage.setItem("pl_hist", JSON.stringify(h.slice(0, 20))); } catch {}
+}
+$("histBtn").onclick = () => {
+  const box = $("history"); box.style.display = box.style.display === "block" ? "none" : "block";
+  box.innerHTML = "";
+  const h = getHist();
+  if (!h.length) { box.textContent = "No history yet."; return; }
+  h.forEach(x => {
+    const d = document.createElement("div"); d.className = "h";
+    const b = document.createElement("b"); b.textContent = x.mode + " · " + new Date(x.t).toLocaleString();
+    d.append(b, document.createElement("br"), document.createTextNode(x.text.slice(0, 140) + (x.text.length > 140 ? "…" : "")));
+    d.onclick = () => { lastResult = x.text; $("out").textContent = x.text; $("actions").hidden = false; };
+    box.appendChild(d);
+  });
+};
+</script>
+</body>
+</html>
