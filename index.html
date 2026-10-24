@@ -254,7 +254,7 @@ async function generate(){
   if (!session) { openModal(); return msg("Log in (it's free) to generate prompts.", true); }
   $("go").disabled = true; $("go").textContent = "Generating…"; msg("Analysing the image…");
   try {
-    const r = await fetch("/.netlify/functions/generate", {
+    const r = await fetch("/generate", {
       method: "POST", headers: {"content-type":"application/json", "authorization":"Bearer " + session.access_token},
       body: JSON.stringify({ mode: $("mode").value, language: $("lang").value, ...(useUrl ? {imageUrl:url} : {image:current}) })
     });
@@ -314,7 +314,7 @@ async function refreshCredits(){
   const badge = $("credits"); if (!sb || !badge) return;
   const s = (await sb.auth.getSession()).data.session; if (!s) return;
   try {
-    const r = await fetch("/.netlify/functions/me", { headers: { authorization: "Bearer " + s.access_token } });
+    const r = await fetch("/me", { headers: { authorization: "Bearer " + s.access_token } });
     const j = await r.json();
     badge.textContent = r.ok ? j.remaining + "/" + j.limit + (j.plan === "pro" ? " this month" : " today") : "";
   } catch {}
